@@ -57,6 +57,13 @@ def main() -> None:
         st.metric("置信度", result["confidence_percent"])
         st.progress(int(round(result["confidence"] * 100)))
 
+    st.divider()
+    st.warning(
+        "免责声明：本网站提供的临床数据和预测结果仅供科研参考，不能作为临床诊断或治疗决策的依据。"
+        "数据来源可能存在选择性偏倚，实际应用时请结合专业医学判断。"
+        "使用者需自行承担风险，本平台不承担因信息使用引发的任何责任。"
+    )
+
 
 if __name__ == "__main__":
     main()
