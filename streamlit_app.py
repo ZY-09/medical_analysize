@@ -1,151 +1,62 @@
-import streamlit as st
-import pandas as pd
-import math
+from __future__ import annotations
+
 from pathlib import Path
 
-# Set the title and favicon that appear in the Browser's tab bar.
-st.set_page_config(
-    page_title='GDP dashboard',
-    page_icon=':earth_americas:', # This is an emoji shortcode. Could be a URL too.
-)
+import streamlit as st
 
-# -----------------------------------------------------------------------------
-# Declare some useful functions.
-
-@st.cache_data
-def get_gdp_data():
-    """Grab GDP data from a CSV file.
-
-    This uses caching to avoid having to read the file every time. If we were
-    reading from an HTTP endpoint instead of a file, it's a good idea to set
-    a maximum age to the cache with the TTL argument: @st.cache_data(ttl='1d')
-    """
-
-    # Instead of a CSV on disk, you could read from an HTTP endpoint here too.
-    DATA_FILENAME = Path(__file__).parent/'data/gdp_data.csv'
-    raw_gdp_df = pd.read_csv(DATA_FILENAME)
-
-    MIN_YEAR = 1960
-    MAX_YEAR = 2022
-
-    # The data above has columns like:
-    # - Country Name
-    # - Country Code
-    # - [Stuff I don't care about]
-    # - GDP for 1960
-    # - GDP for 1961
-    # - GDP for 1962
-    # - ...
-    # - GDP for 2022
-    #
-    # ...but I want this instead:
-    # - Country Name
-    # - Country Code
-    # - Year
-    # - GDP
-    #
-    # So let's pivot all those year-columns into two: Year and GDP
-    gdp_df = raw_gdp_df.melt(
-        ['Country Code'],
-        [str(x) for x in range(MIN_YEAR, MAX_YEAR + 1)],
-        'Year',
-        'GDP',
-    )
-
-    # Convert years from string to integers
-    gdp_df['Year'] = pd.to_numeric(gdp_df['Year'])
-
-    return gdp_df
-
-gdp_df = get_gdp_data()
-
-# -----------------------------------------------------------------------------
-# Draw the actual page
-
-# Set the title that appears at the top of the page.
-'''
-# :earth_americas: GDP dashboard
-
-Browse GDP data from the [World Bank Open Data](https://data.worldbank.org/) website. As you'll
-notice, the data only goes to 2022 right now, and datapoints for certain years are often missing.
-But it's otherwise a great (and did I mention _free_?) source of data.
-'''
-
-# Add some spacing
-''
-''
-
-min_value = gdp_df['Year'].min()
-max_value = gdp_df['Year'].max()
-
-from_year, to_year = st.slider(
-    'Which years are you interested in?',
-    min_value=min_value,
-    max_value=max_value,
-    value=[min_value, max_value])
-
-countries = gdp_df['Country Code'].unique()
-
-if not len(countries):
-    st.warning("Select at least one country")
-
-selected_countries = st.multiselect(
-    'Which countries would you like to view?',
-    countries,
-    ['DEU', 'FRA', 'GBR', 'BRA', 'MEX', 'JPN'])
-
-''
-''
-''
-
-# Filter the data
-filtered_gdp_df = gdp_df[
-    (gdp_df['Country Code'].isin(selected_countries))
-    & (gdp_df['Year'] <= to_year)
-    & (from_year <= gdp_df['Year'])
-]
-
-st.header('GDP over time', divider='gray')
-
-''
-
-st.line_chart(
-    filtered_gdp_df,
-    x='Year',
-    y='GDP',
-    color='Country Code',
-)
-
-''
-''
+from classify_tumor import DEFAULT_DATA_DIR, build_model, classify_tumor
 
 
-first_year = gdp_df[gdp_df['Year'] == from_year]
-last_year = gdp_df[gdp_df['Year'] == to_year]
+@st.cache_resource
+def get_model(data_dir: str):
+    return build_model(Path(data_dir))
 
-st.header(f'GDP in {to_year}', divider='gray')
 
-''
+def main() -> None:
+    st.set_page_config(page_title="Tumor Image Classifier", page_icon="🩺", layout="centered")
+    st.title("Tumor Image Classifier")
+    st.caption("上传图像并填写相关指标后，系统将输出良性/恶性判断和置信度。")
 
-cols = st.columns(4)
+    data_dir = DEFAULT_DATA_DIR
+    st.write(f"当前数据目录：`{data_dir}`")
 
-for i, country in enumerate(selected_countries):
-    col = cols[i % len(cols)]
+    if not data_dir.exists():
+        st.error("未找到 `data` 目录。请在项目中准备 `data/good` 和 `data/bad` 参考图像后再部署。")
+        st.stop()
 
-    with col:
-        first_gdp = first_year[first_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
-        last_gdp = last_year[last_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
+    try:
+        model = get_model(str(data_dir))
+    except Exception as exc:
+        st.error(f"模型初始化失败：{exc}")
+        st.stop()
 
-        if math.isnan(first_gdp):
-            growth = 'n/a'
-            delta_color = 'off'
+    uploaded_file = st.file_uploader("上传肿瘤图像", type=["png", "jpg", "jpeg", "bmp"])
+    ca19_9 = st.number_input("CA19-9 指标", min_value=0.0, value=0.0, step=1.0)
+    tumor_size = st.number_input("肿瘤大小", min_value=0.0, value=0.0, step=0.1)
+
+    if uploaded_file is not None:
+        st.image(uploaded_file, caption="待分析图像", use_container_width=True)
+
+    if st.button("开始分析", type="primary", disabled=uploaded_file is None):
+        try:
+            result = classify_tumor(
+                uploaded_file.getvalue(),
+                ca19_9=ca19_9,
+                tumor_size=tumor_size,
+                model=model,
+            )
+        except Exception as exc:
+            st.error(f"分析失败：{exc}")
+            st.stop()
+
+        if result["label"] == "bad":
+            st.error(f"预测结果：{result['label_text']}")
         else:
-            growth = f'{last_gdp / first_gdp:,.2f}x'
-            delta_color = 'normal'
+            st.success(f"预测结果：{result['label_text']}")
 
-        st.metric(
-            label=f'{country} GDP',
-            value=f'{last_gdp:,.0f}B',
-            delta=growth,
-            delta_color=delta_color
-        )
+        st.metric("置信度", result["confidence_percent"])
+        st.progress(int(round(result["confidence"] * 100)))
+
+
+if __name__ == "__main__":
+    main()
