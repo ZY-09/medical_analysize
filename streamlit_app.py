@@ -31,7 +31,7 @@ def main() -> None:
 
     uploaded_file = st.file_uploader("上传肿瘤图像", type=["png", "jpg", "jpeg", "bmp"])
     ca19_9 = st.number_input("CA19-9 指标", min_value=0.0, value=0.0, step=1.0)
-    tumor_size = st.number_input("肿瘤大小", min_value=0.0, value=0.0, step=0.1)
+    tumor_size = st.number_input("肿瘤大小(最大宽度)", min_value=0.0, value=0.0, step=0.1)
 
     if uploaded_file is not None:
         st.image(uploaded_file, caption="待分析图像", use_container_width=True)
