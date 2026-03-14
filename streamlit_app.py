@@ -18,7 +18,6 @@ def main() -> None:
     st.caption("上传图像并填写相关指标后，系统将输出良性/恶性判断和置信度。")
 
     data_dir = DEFAULT_DATA_DIR
-    st.write(f"当前数据目录：`{data_dir}`")
 
     if not data_dir.exists():
         st.error("未找到 `data` 目录。请在项目中准备 `data/good` 和 `data/bad` 参考图像后再部署。")
